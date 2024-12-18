@@ -1,0 +1,19 @@
+[
+  {
+    "masterKey": {
+      "devMode": true,
+      "database": false
+    },
+    "fcaOption": {
+      "forceLogin": true,
+      "listenEvents": true,
+      "logLevel": "silent",
+      "updatePresence": true,
+      "selfListen": false,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0",
+      "online": false,
+      "autoMarkDelivery": false,
+      "autoMarkRead": false
+    }
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "author": "Kenneth Panio",
+  "port": "",
+  "restartkey": "",
+  "admins": [
+        "61564046133266",
+        "61563504007719",
+        "100047505630312",
+        "61561308225073",
+        "61553851666802",
+        "61550873742628",
+        "100081201591674",
+        "61557847859084",
+        "61556556071548",
+        "61564818644187",
+        "61567428059504",
+        "61566984747506",
+        "100075645547118"
+      ],
+  "timezone": "Asia/Manila",
+  "cronJobs": {
+    "morningGreetings": {
+      "enabled": false,
+      "hours": [5, 6, 7]
+    },
+    "afternoonGreetings": {
+      "enabled": false,
+      "hours": [12, 13]
+    },
+    "eveningGreetings": {
+      "enabled": false,
+      "hours": [18, 19, 20, 21]
+    },
+    "nightGreetings": {
+      "enabled": false,
+      "hours": [22, 23]
+    },
+    "restart": {
+      "enabled": true,
+      "cronExpression": "0 */6 * * *"
+    },
+    "clearChat": {
+      "enabled": true,
+      "cronExpression": "0 0 * * *"
+    },
+    "acceptPending": {
+      "enabled": false,
+      "cronExpression": "*/50 * * * *"
+    },
+    "motivation": {
+      "enabled": false,
+      "cronExpression": "*/50 * * * *"
+    }
+  }
+}
