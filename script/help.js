@@ -11,9 +11,9 @@ module.exports["config"] = {
 module.exports["run"] = async function ({ api, event, Utils, prefix, args, chat, fonts }) {
   const input = args.join(' ').trim().toLowerCase();
   const tin = txt => fonts.thin(txt);
-  const allCommands = [...Utils.commands.values(),
-...Utils.handleEvent.values()];
-  const perPage = 11;
+  const allCommands = [...Utils.commands.values(), ...Utils.handleEvent.values()];
+  const perPage = 11; // 
+  const maxFirstPage = 230;
 
   try {
     const totalCommands = allCommands.length;
@@ -29,19 +29,77 @@ module.exports["run"] = async function ({ api, event, Utils, prefix, args, chat,
       });
 
       helpMessage += `\nFor all cmds, type '${prefix || ''}help all'\n`;
-     // helpMessage += `To see another page, use '${prefix || ''}help [page-number]'\n`;
       chat.reply(tin(helpMessage));
-    } else if (input === 'all') {
+    } 
+    else if (/^(all|command|commands?|commandd)$/i.test(input)) {
       let helpMessage = `📋 | CMDS List: 〔${prefix || 'no prefix'}〕\n`;
       helpMessage += `Total Commands: ${totalCommands}🏷️\n\n`;
 
-      allCommands.forEach((command, index) => {
-        const { name, info, usage } = command;
+      const allCommandsSubset = allCommands.slice(0, maxFirstPage); // 250 commands for 'helpv2 all'
+      allCommandsSubset.forEach((command, index) => {
+        const { name, usage } = command;
         helpMessage += `\t${index + 1}. ${name} ${usage ? `${usage}` : ''}\n`;
       });
 
+      chat.reply(tin(`${helpMessage}\nMessage too long, To see more commands type "Help allv2"`));
+    } 
+    else if (/^(allv2|restcommands)$/i.test(input)) {
+      let helpMessage = `📋 | CMDS List (231 - ${totalCommands}): 〔${prefix || 'no prefix'}〕\n`;
+      helpMessage += `Total Commands: ${totalCommands}🏷️\n\n`;
+
+      const startIndex = 230; // Start from the 251st command (index 250)
+      const allCommandsSubset = allCommands.slice(startIndex);
+
+      allCommandsSubset.forEach((command, index) => {
+        const { name, usage } = command;
+        helpMessage += `\t${startIndex + index + 1}. ${name} ${usage ? `${usage}` : ''}\n`;
+      });
+
+      chat.reply(tin(`${helpMessage}`));
+    } /*
+    else if (/^(all3)$/i.test(input)) {
+      let helpMessage = `📋 | CMDS List (from 451 to 650): 〔${prefix || 'no prefix'}〕\n`;
+      helpMessage += `Total Commands: ${totalCommands}🏷️\n\n`;
+
+      const startIndex = 450; // Start from the 451st command (index 450)
+      const allCommandsSubset = allCommands.slice(startIndex, 650);
+
+      allCommandsSubset.forEach((command, index) => {
+        const { name, usage } = command;
+        helpMessage += `\t${startIndex + index + 1}. ${name} ${usage ? `${usage}` : ''}\n`;
+      });
+
       chat.reply(tin(helpMessage));
-    } else if (!isNaN(input)) {
+    } 
+    else if (/^(all4)$/i.test(input)) {
+      let helpMessage = `📋 | CMDS List (from 651 to 850): 〔${prefix || 'no prefix'}〕\n`;
+      helpMessage += `Total Commands: ${totalCommands}🏷️\n\n`;
+
+      const startIndex = 650; // Start from the 651st command (index 650)
+      const allCommandsSubset = allCommands.slice(startIndex, 850);
+
+      allCommandsSubset.forEach((command, index) => {
+        const { name, usage } = command;
+        helpMessage += `\t${startIndex + index + 1}. ${name} ${usage ? `${usage}` : ''}\n`;
+      });
+
+      chat.reply(tin(helpMessage));
+    } 
+    else if (/^(all5)$/i.test(input)) {
+      let helpMessage = `📋 | CMDS List (from 851 to ${totalCommands}): 〔${prefix || 'no prefix'}〕\n`;
+      helpMessage += `Total Commands: ${totalCommands}🏷️\n\n`;
+
+      const startIndex = 850; // Start from the 851st command (index 850)
+      const allCommandsSubset = allCommands.slice(startIndex);
+
+      allCommandsSubset.forEach((command, index) => {
+        const { name, usage } = command;
+        helpMessage += `\t${startIndex + index + 1}. ${name} ${usage ? `${usage}` : ''}\n`;
+      });
+
+      chat.reply(tin(helpMessage));
+    } */
+    else if (!isNaN(input)) {
       const page = parseInt(input);
       const totalPages = Math.ceil(totalCommands / perPage);
 
@@ -58,13 +116,14 @@ module.exports["run"] = async function ({ api, event, Utils, prefix, args, chat,
       helpMessage += `Total Commands: ${totalCommands}🏷️\n\n`;
 
       commandsOnPage.forEach((command, index) => {
-        const { name, info, usage } = command;
+        const { name, usage } = command;
         helpMessage += `\t${startIndex + index + 1}. ${name} ${usage ? `${usage}` : ''}\n`;
       });
 
-      //helpMessage += `\nTo see another page, use '${prefix || ''}help [page-number]'\n`;
       chat.reply(tin(helpMessage));
-    } else {
+    } 
+    // Handle individual command details
+    else {
       const selectedCommand = allCommands.find(command => {
         const aliases = command?.aliases || [];
         return command.name.toLowerCase() === input || aliases.includes(input);
@@ -82,7 +141,7 @@ module.exports["run"] = async function ({ api, event, Utils, prefix, args, chat,
         const message = `COMMAND\n\nName: ${name}\n${versionMessage}${roleMessage}\n${aliasesMessage}${descriptionMessage}${usageMessage}${creditsMessage}${cooldownMessage}`;
         chat.reply(tin(message));
       } else {
-        chat.reply(tin(`Command '${input}' not found. Use '${prefix || '' }help' to see available commands.`));
+        chat.reply(tin(`Command '${input}' not found. Use '${prefix || ''}help' to see available commands.`));
       }
     }
   } catch (error) {
