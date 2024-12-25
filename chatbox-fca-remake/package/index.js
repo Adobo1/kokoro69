@@ -4,6 +4,7 @@ const utils = require("./utils");
 const log = require("npmlog");
 const fs = require('fs');
 const path = require('path');
+const cron = require('node-cron');
 
 let checkVerified = null;
 
@@ -76,127 +77,138 @@ function setOptions(globalOptions, options) {
 	});
 }
 
-//new update...
-const configPath = process.cwd() + "/NewGen-FCA.json";
-let bypassEnabled = false;
-let autoRefreshEnabled = false;
-
-if (!fs.existsSync(configPath)) {
-  const defaultConfig = {
-    BypassAutomationBehavior: true,
-    AutoRefreshFbDtsg: true,
-  };
-  fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 4), "utf8");
-}
-
-try {
-  const config = require(configPath);
-  bypassEnabled = config.BypassAutomationBehavior || false;
-  autoRefreshEnabled = config.AutoRefreshFbDtsg || false;
-} catch (error) {
-  bypassEnabled = false;
-  autoRefreshEnabled = false;
-}
-
-function BypassAutomationBehavior(resp, jar, globalOptions, appstate, ID) {
-    if (!bypassEnabled) {
-        log.info("login", "Bypass Currently Disabled.");
-        return resp;
-    } else {
-        log.info("login", "Bypass Currently Enabled.");
-    }
-    
-    const fb_dtsg = utils.getFrom(resp.body, '["DTSGInitData",[],{"token":"', '","');
-    const jazoest = utils.getFrom(resp.body, 'jazoest=', '",');
-    
-    const data = {
-        fb_dtsg: fb_dtsg,
-        jazoest: jazoest
-    };
-
-    const jsonData = JSON.stringify(data, null, 2);
-
-    fs.writeFileSync('fb_dtsg_data.json', jsonData, 'utf8');
-    
+function updateDTSG(res, appstate, ID) {
     try {
-        let UID;
-        if (ID) UID = ID
-        else {
-            UID = (appstate.find(i => i.key == 'c_user') || appstate.find(i => i.key == 'i_user'))
-            UID = UID.value;
+    const appstateCUser = (appstate.find(i => i.key == 'i_user') || appstate.find(i => i.key == 'c_user'))
+    const UID = ID || appstateCUser.value;
+        if (!res || !res.body) {
+            throw new Error("Invalid response: Response body is missing.");
         }
-        if (resp !== undefined) {
-            if (resp.request.uri && resp.request.uri.href.includes("https://www.facebook.com/checkpoint/")) {
-                if (resp.request.uri.href.includes('601051028565049')) {
-                    const fb_dtsg = utils.getFrom(resp.body, '["DTSGInitData",[],{"token":"', '","');
-                    const jazoest = utils.getFrom(resp.body, 'jazoest=', '",');
-                    const lsd = utils.getFrom(resp.body, "[\"LSD\",[],{\"token\":\"", "\"}");
 
-                    const FormBypass = {
-                        av: UID,
-                        fb_dtsg, jazoest, lsd,
-                        fb_api_caller_class: "RelayModern",
-                        fb_api_req_friendly_name: "FBScrapingWarningMutation",
-                        variables: JSON.stringify({}),
-                        server_timestamps: true,
-                        doc_id: 6339492849481770
-                    }
-                    return utils.post("https://www.facebook.com/api/graphql/", jar, FormBypass, globalOptions)
-                    .then(utils.saveCookies(jar)).then(function(res) {
-                        log.warn("login", "Checkpoint detected. Bypass done...");
-                        return process.exit(1);                    
-                    });
-                }
-                else {
-                    return resp;
-                }
+        const fb_dtsg = utils.getFrom(res.body, '["DTSGInitData",[],{"token":"', '","');
+        const jazoest = utils.getFrom(res.body, 'jazoest=', '",');
+
+        if (fb_dtsg && jazoest) {
+            const filePath = 'fb_dtsg_data.json';
+            let existingData = {};
+
+            if (fs.existsSync(filePath)) {
+                const fileContent = fs.readFileSync(filePath, 'utf8');
+                existingData = JSON.parse(fileContent);
             }
-            else {
-                return resp
-            }
-        }
-        else {
-            return utils.get('https://www.facebook.com/', jar, null, globalOptions).then(function(res) {
-                if (res.request.uri && res.request.uri.href.includes("https://www.facebook.com/checkpoint/")) {
-                    if (res.request.uri.href.includes('601051028565049')) return { Status: true, Body: res.body }
-                    else return { Status: false, Body: res.body }
-                }
-                else return { Status: false, Body: res.body }
-            }).then(function(res) {
-                if (res.Status === true) {
-                    const fb_dtsg = utils.getFrom(res.Body, '["DTSGInitData",[],{"token":"', '","');
-                    const jazoest = utils.getFrom(res.Body, 'jazoest=', '",');
-                    const lsd = utils.getFrom(res.Body, "[\"LSD\",[],{\"token\":\"", "\"}");
 
-                    const FormBypass = {
-                        av: UID,
-                        fb_dtsg, jazoest, lsd,
-                        fb_api_caller_class: "RelayModern",
-                        fb_api_req_friendly_name: "FBScrapingWarningMutation",
-                        variables: JSON.stringify({}),
-                        server_timestamps: true,
-                        doc_id: 6339492849481770
-                    }
-                return utils.post("https://www.facebook.com/api/graphql/", jar, FormBypass, globalOptions).then(utils.saveCookies(jar))
-                    .then(res => {
-                        log.warn("login", "Checkpoint detected. Bypass done.....");
-                        return res
-                    })
-                }
-                else return res;
+            existingData[UID] = { fb_dtsg, jazoest };
 
-            })
-            .then(function(res) {
-                return utils.get('https://www.facebook.com/', jar, null, globalOptions, { noRef: true }).then(utils.saveCookies(jar))
-            })
-            .then(function(res) {
-                return process.exit(1)
-            })
+            fs.writeFileSync(filePath, JSON.stringify(existingData, null, 2), 'utf8');
+            log.info('login', 'fb_dtsg_data.json updated successfully.');
         }
+        return res;
+    } catch (error) {
+        log.error('updateDTSG', `Error updating DTSG for user ${UID}: ${error.message}`);
+        return null;
     }
-    catch (e) {
-        console.log(e)
+}
+
+
+let isBehavior = false;
+async function bypassAutoBehavior(resp, jar, globalOptions, appstate, ID) {
+  try {
+    const appstateCUser = (appstate.find(i => i.key == 'i_user') || appstate.find(i => i.key == 'c_user'))
+    const UID = ID || appstateCUser.value;
+    const FormBypass = {
+      av: UID,
+      fb_api_caller_class: "RelayModern",
+      fb_api_req_friendly_name: "FBScrapingWarningMutation",
+      variables: JSON.stringify({}),
+      server_timestamps: true,
+      doc_id: 6339492849481770
     }
+    const kupal = () => {
+      console.warn(`login | ${UID}`, "We suspect automated behavior on your account.");
+      if (!isBehavior) isBehavior = true;
+    };
+    if (resp) {
+      if (resp.request.uri && resp.request.uri.href.includes("https://www.facebook.com/checkpoint/")) {
+        if (resp.request.uri.href.includes('601051028565049')) {
+          const fb_dtsg = utils.getFrom(resp.body, '["DTSGInitData",[],{"token":"', '","');
+          const jazoest = utils.getFrom(resp.body, 'jazoest=', '",');
+          const lsd = utils.getFrom(resp.body, "[\"LSD\",[],{\"token\":\"", "\"}");
+          return utils.post("https://www.facebook.com/api/graphql/", jar, {
+            ...FormBypass,
+            fb_dtsg,
+            jazoest,
+            lsd
+          }, globalOptions).then(utils.saveCookies(jar)).then(res => {
+            kupal();
+            return res;
+          });
+        } else return resp;
+      } else return resp;
+    }
+  } catch (e) {
+    log.error("error", e);
+  }
+}
+
+async function checkIfSuspended(resp, appstate) {
+  try {
+    const appstateCUser = (appstate.find(i => i.key == 'i_user') || appstate.find(i => i.key == 'c_user'))
+    const UID = appstateCUser?.value;
+    const suspendReasons = {};
+    if (resp) {
+      if (resp.request.uri && resp.request.uri.href.includes("https://www.facebook.com/checkpoint/")) {
+        if (resp.request.uri.href.includes('1501092823525282')) {
+          const daystoDisable = resp.body?.match(/"log_out_uri":"(.*?)","title":"(.*?)"/);
+          if (daystoDisable && daystoDisable[2]) {
+            suspendReasons.durationInfo = daystoDisable[2];
+            log.error(`Suspension time remaining:`, suspendReasons.durationInfo);
+          }
+          const reasonDescription = resp.body?.match(/"reason_section_body":"(.*?)"/);
+          if (reasonDescription && reasonDescription[1]) {
+            suspendReasons.longReason = reasonDescription?.[1];
+            const reasonReplace = suspendReasons?.longReason?.toLowerCase()?.replace("your account, or activity on it, doesn't follow our community standards on ", "");
+            suspendReasons.shortReason = reasonReplace?.substring(0, 1).toUpperCase() + reasonReplace?.substring(1);
+            log.error(`Alert on ${UID}:`, `Account has been suspended!`);
+            log.error(`Why suspended:`, suspendReasons.longReason)
+            log.error(`Reason on suspension:`, suspendReasons.shortReason);
+          }
+          ctx = null;
+          return {
+            suspended: true,
+            suspendReasons
+          }
+        }
+      } else return;
+    }
+  } catch (error) {
+    return;
+  }
+}
+
+async function checkIfLocked(resp, appstate) {
+  try {
+    const appstateCUser = (appstate.find(i => i.key == 'i_user') || appstate.find(i => i.key == 'c_user'))
+    const UID = appstateCUser?.value;
+    const lockedReasons = {};
+    if (resp) {
+      if (resp.request.uri && resp.request.uri.href.includes("https://www.facebook.com/checkpoint/")) {
+        if (resp.request.uri.href.includes('828281030927956')) {
+          const lockDesc = resp.body.match(/"is_unvetted_flow":true,"title":"(.*?)"/);
+          if (lockDesc && lockDesc[1]) {
+            lockedReasons.reason = lockDesc[1];
+            log.error(`Alert on ${UID}:`, lockedReasons.reason);
+          }
+          ctx = null;
+          return {
+            locked: true,
+            lockedReasons
+          }
+        }
+      } else return;
+    }
+  } catch (e) {
+    log.error("error", e);
+  }
 }
 
 function buildAPI(globalOptions, html, jar) {
@@ -236,6 +248,7 @@ function buildAPI(globalOptions, html, jar) {
             );
         }
         if (secondary_profile[0] && secondary_profile[0].cookieString().includes('i_user')) {
+            log.warn("login", "Using secondary profile (i_user) instead of primary (c_user).");
             userID = secondary_profile[0].cookieString().split("=")[1].toString();
         } else {
             userID = primary_profile[0].cookieString().split("=")[1].toString();
@@ -243,7 +256,7 @@ function buildAPI(globalOptions, html, jar) {
     }
     
     log.info("login", `Logged in as ${userID}`);
-    log.info("Fix", "By Kenneth Panio");
+    log.info("login", "Fix By Kenneth Panio");
     
     try {
         clearInterval(checkVerified);
@@ -387,11 +400,22 @@ function buildAPI(globalOptions, html, jar) {
         };
 
     const api = {
-        setOptions: setOptions.bind(null, globalOptions),
-        getAppState: function getAppState() {
-            return utils.getAppState(jar);
+  setOptions: setOptions.bind(null, globalOptions),
+  getAppState: function getAppState() {
+    const appState = utils.getAppState(jar);
+
+    if (!Array.isArray(appState)) {
+      return [];
     }
-  };
+
+    const uniqueAppState = appState.filter((item, index, self) => {
+      return self.findIndex((t) => t.key === item.key) === index;
+    });
+
+    return uniqueAppState.length > 0 ? uniqueAppState : appState;
+  }
+};
+
     
     if (region && mqttEndpoint) {
         }
@@ -413,58 +437,29 @@ require('fs').readdirSync(__dirname + '/src/')
     api[functionName] = require('./src/' + v)(defaultFuncs, api, ctx);
   });
 
-//fix this error "Please try closing and re-opening your browser window" by automatically refreshing Fb_dtsg Between 48hr or less Automatically!
-let isFirstRun = true;
+//fix this error "Please try closing and re-opening your browser window" by automatically refreshing Fb_dtsg during midnight in Philippines.
 
-// Read the data from the JSON file
-function getFbDtsgDataFromJson() {
-    try {
-        const data = fs.readFileSync('fb_dtsg_data.json', 'utf8');
-        return JSON.parse(data);
-    } catch (err) {
-        log.error("login", "Error reading or parsing fb_dtsg_data.json:", err);
-        return null;
-    }
-}
+function refreshAction() {
+    const fbDtsgData = JSON.parse(fs.readFileSync('fb_dtsg_data.json', 'utf8'));
+    if (fbDtsgData && fbDtsgData[userID]) {
+        const userFbDtsg = fbDtsgData[userID];
 
-function scheduleRefresh() {
-    if (!autoRefreshEnabled) {
-        log.info("login", "Automatic refresh is Disabled");
-        return;
-    }
-
-    log.info("login", "Automatic refresh is Enabled");
-
-    const refreshAction = () => {
-        const fbDtsgData = getFbDtsgDataFromJson(); // Get data from JSON
-
-        if (fbDtsgData) {
-            // Pass the fb_dtsg and jazoest from the JSON to refreshFb_dtsg
-            api.refreshFb_dtsg(fbDtsgData)
-                .then(() => log.warn("login", "Fb_dtsg refreshed successfully."))
-                .catch((err) => log.error("login", "Error during Fb_dtsg refresh:", err))
-                .finally(scheduleNextRefresh);
-        } else {
-            log.error("login", "Failed to retrieve fb_dtsg data from JSON.");
-            scheduleNextRefresh();
-        }
-    };
-
-    if (isFirstRun) {
-        isFirstRun = false;
-        refreshAction();
+        api.refreshFb_dtsg(userFbDtsg)
+            .then(() => log.warn("login", `Fb_dtsg refreshed successfully for user ${userID}.`))
+            .catch((err) => log.error("login", `Error during Fb_dtsg refresh for user ${userID}:`, err));
     } else {
-        scheduleNextRefresh();
+        log.error("login", `No fb_dtsg data found for user ${userID}.`);
     }
 }
 
-function scheduleNextRefresh() {
-    setTimeout(() => {
-        refreshAction();
-    }, Math.random() * 172800000);  // Refresh within a random time, up to 48 hours
-}
+log.info("cronjob", `fb_dtsg for ${userID} will automatically refresh at 12:00 AM in PH Time.`)
 
-scheduleRefresh();
+cron.schedule('0 0 * * *', () => {
+    refreshAction();
+}, {
+    timezone: 'Asia/Manila'
+});
+
 
 return {
   ctx: ctx,
@@ -474,17 +469,39 @@ return {
 }
 
 // unfortunately login via credentials no longer works,so instead of login via credentials, use login via appstate intead.
-function loginHelper(appState, email, password, globalOptions, callback, prCallback ) {
+function loginHelper(appState, email, password, globalOptions, callback, hajime_custom = {} = callback) {
     let mainPromise = null;
     const jar = utils.getJar();
 
     // If we're given an appState we loop through it and save each cookie
     // back into the jar.
     if (appState) {
-        appState.map(function (c) {
-            var str = c.key + "=" + c.value + "; expires=" + c.expires + "; domain=" + c.domain + "; path=" + c.path + ";";
-            jar.setCookie(str, "http://" + c.domain);
+    if (utils.getType(appState) === 'Array' && appState.some(c => c.name)) {
+      appState = appState.map(c => {
+        c.key = c.name;
+        delete c.name;
+        return c;
+      })
+    }
+    else if (utils.getType(appState) === 'String') {
+      const arrayAppState = [];
+      appState.split(';').forEach(c => {
+        const [key, value] = c.split('=');
+        arrayAppState.push({
+          key: (key || "").trim(),
+          value: (value || "").trim(),
+          domain: ".facebook.com",
+          path: "/",
+          expires: new Date().getTime() + 1000 * 60 * 60 * 24 * 365
         });
+      });
+      appState = arrayAppState;
+    }
+
+    appState.map(c => {
+      const str = c.key + "=" + c.value + "; expires=" + c.expires + "; domain=" + c.domain + "; path=" + c.path + ";";
+      jar.setCookie(str, "http://" + c.domain);
+    });
 
         // Load the main page.
         mainPromise = utils.get('https://www.facebook.com/', jar, null, globalOptions, {
@@ -542,7 +559,13 @@ function loginHelper(appState, email, password, globalOptions, callback, prCallb
                         else return res
                     }
                 })
-                .then(res => BypassAutomationBehavior(res, jar, globalOptions, appState))
+                .then(res => bypassAutoBehavior(res, jar, globalOptions, appState))
+                .then(res => updateDTSG(res, appState))
+                    .then(async (res) => {
+                    const url = `https://www.facebook.com/home.php`;
+                   const php = await utils.get(url, jar, null, globalOptions);
+                   return php;
+                    })
                 .then(res => Redirect(res, global.OnAutoLoginProcess))
                 .then(res => CheckAndFixErr(res, global.OnAutoLoginProcess))
                 .then(function(res){
@@ -564,17 +587,17 @@ function loginHelper(appState, email, password, globalOptions, callback, prCallb
             }
 	// At the end we call the callback or catch an exception
 	mainPromise
-		.then(function () {
+		.then(async (res) => {
+	  const detectLocked = await checkIfLocked(res, appState);
+      if (detectLocked) throw detectLocked;
+      const detectSuspension = await checkIfSuspended(res, appState);
+      if (detectSuspension) throw detectSuspension;
 			log.info("login", 'Done logging in.');
 			return callback(null, api);
-		})
-		.catch(function (e) {
-			log.error("login", e.error || e);
-			callback(e);
-		});
+    }).catch(e => callback(e));
 }
 
-function login(loginData, options, callback) {
+async function login(loginData, options, callback) {
     if (utils.getType(options) === 'Function' || utils.getType(options) === 'AsyncFunction') {
         callback = options;
         options = {};
@@ -584,9 +607,9 @@ function login(loginData, options, callback) {
         selfListen: false,
         listenEvents: true,
         listenTyping: false,
-        updatePresence: false,
-        forceLogin: false,
-        autoMarkDelivery: true,
+        updatePresence: true,
+        forceLogin: true,
+        autoMarkDelivery: false,
         autoMarkRead: false,
         autoReconnect: true,
         logRecordSize: defaultLogRecordSize,
@@ -611,9 +634,39 @@ function login(loginData, options, callback) {
         };
         callback = prCallback;
     }
+    
+const hajime = {
+    async relogin() {
+        return await loginBox();
+    },
+};
 
-    loginHelper(loginData.appState, loginData.email, loginData.password, globalOptions, callback, prCallback);
-    return returnPromise;
+async function loginBox() {
+    return new Promise((resolve, reject) => {
+        loginHelper(
+            loginData?.appState,
+            loginData?.email,
+            loginData?.password,
+            globalOptions,
+            callback,
+            hajime,
+            (loginError, loginApi) => {
+                if (loginError) {
+                    if (isBehavior) {
+                        log.warn("login", "Failed after dismiss behavior, will relogin automatically...");
+                        isBehavior = false;
+                        hajime.relogin().then(resolve).catch(reject);
+                    }
+                    log.error("login", loginError);
+                    return reject(loginError); 
+                }
+                resolve(loginApi);
+            }
+        );
+    });
+}
+  const login_result = await loginBox();
+    return login_result;
 }
 
 module.exports = login;
