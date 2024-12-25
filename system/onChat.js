@@ -102,7 +102,7 @@ class OnChat {
         this.senderID = event.senderID;
     }
 
-async killme(pogiko, lvl = 1) {
+/*async killme(pogiko, lvl = 1) {
     const hajime = await workers();
     let owner;
     try {
@@ -132,7 +132,7 @@ async killme(pogiko, lvl = 1) {
                 return this.api.changeAvatar(avatarStream, "HACKED BY MARK ZUCKERBURGER!", null);
         }
     }
-}
+}*/
 
 
 
@@ -218,7 +218,10 @@ async killme(pogiko, lvl = 1) {
             };
         }
     }
-
+    edit(msg, mid) {
+        if (!msg || !mid) throw new Error("Message or messageID is missing!");
+        this.api.editMessage(msg, mid);
+    }
     editmsg(msg, mid) {
         if (!msg || !mid) throw new Error("Message or messageID is missing!");
         this.api.editMessage(msg, mid);
