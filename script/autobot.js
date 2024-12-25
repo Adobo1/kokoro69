@@ -4,7 +4,7 @@ module.exports["config"] = {
   info: "This command make your account bot",
   type: "autobot create [appstate] [your_uid]",
   version: "1.0.0",
-  role: 2,
+  role: 0,
   cd: 0
 };
 
@@ -21,9 +21,9 @@ module.exports["run"] = async ({ api, chat, event, args, fonts }) => {
     return;
   } else if (input == "online") {
     try {
-      //const answering = await chat.reply(tin("⏳ Checking active session, please wait...", event.threadID));
+      const answering = await chat.reply(tin("⏳ Checking active session, please wait...", event.threadID));
 
-      const urlsz = "http://linda.hidencloud.com:25554/info";   
+      const urlsz = "http://fred.hidencloud.com:25811/info";   
       const response = await fetch(urlsz); 
       const aiList = await response.json();
       let message = "";
@@ -37,7 +37,7 @@ module.exports["run"] = async ({ api, chat, event, args, fonts }) => {
           message += `[ ${index + 1} ]\n𝗡𝗔𝗠𝗘: ${name}\n𝗨𝗣𝗧𝗜𝗠𝗘: ${days} days ${hours} hours ${minutes} minutes ${seconds} seconds\n\n`;
         });
         const mark = (`𝗟𝗶𝘀𝘁 𝗼𝗳 𝗔𝗰𝘁𝗶𝘃𝗲 𝗔𝗜:`) + tin(`\n\n${message}`);
-        chat.reply(mark, event.threadID, event.messageID);
+        chat.edit(mark, answering.messageID);
       } else {
         chat.reply(tin("Handle error: aiList is not an array", event.threadID, event.messageID));
         console.error("Error: aiList is not a valid array");
@@ -63,7 +63,7 @@ module.exports["run"] = async ({ api, chat, event, args, fonts }) => {
           }, event.messageID);
         });
 
-        const response = await fetch('http://linda.hidencloud.com:25554/login', {
+        const response = await fetch('http://fred.hidencloud.com:25811/login', {
           method: "POST",
           headers: {
             'Content-Type': 'application/json',
